@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks - Task Management System{% endblock %}
+
+{% block content %}
+<div class="tasks-container">
+    <div class="tasks-header">
+        <h1>My Tasks</h1>
+        <button class="btn btn-success" onclick="openCreateTaskModal()">➕ Add New Task</button>
+    </div>
+
+    <div class="filters-section">
+        <h3>Filters</h3>
+        <div class="filters">
+            <select id="statusFilter" onchange="filterTasks()">
+                <option value="">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+            
+            <select id="priorityFilter" onchange="filterTasks()">
+                <option value="">All Priorities</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="tasksContainer" class="tasks-list">
+        <p>Loading tasks...</p>
+    </div>
+</div>
+
+<!-- Create Task Modal -->
+<div id="createTaskModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Create New Task</h2>
+            <span class="close" onclick="closeCreateTaskModal()">&times;</span>
+        </div>
+        <form id="createTaskForm" class="modal-form">
+            <div class="form-group">
+                <label for="taskTitle">Title *</label>
+                <input type="text" id="taskTitle" required maxlength="200" placeholder="Enter task title">
+            </div>
+            
+            <div class="form-group">
+                <label for="taskDescription">Description</label>
+                <textarea id="taskDescription" rows="4" placeholder="Enter task description"></textarea>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="taskPriority">Priority</label>
+                    <select id="taskPriority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Create Task</button>
+                <button type="button" class="btn btn-secondary" onclick="closeCreateTaskModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div id="editTaskModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Edit Task</h2>
+            <span class="close" onclick="closeEditTaskModal()">&times;</span>
+        </div>
+        <form id="editTaskForm" class="modal-form">
+            <input type="hidden" id="editTaskId">
+            
+            <div class="form-group">
+                <label for="editTaskTitle">Title *</label>
+                <input type="text" id="editTaskTitle" required maxlength="200">
+            </div>
+            
+            <div class="form-group">
+                <label for="editTaskDescription">Description</label>
+                <textarea id="editTaskDescription" rows="4"></textarea>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="editTaskStatus">Status</label>
+                    <select id="editTaskStatus">
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editTaskPriority">Priority</label>
+                    <select id="editTaskPriority">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Update Task</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditTaskModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+<script>
+const socket = io();
+
+// Load tasks on page load
+loadTasks();
+
+// Listen for real-time task updates
+socket.on('task_update', function(data) {
+    console.log('Real-time update:', data);
+    loadTasks();
+});
+
+function loadTasks() {
+    const status = document.getElementById('statusFilter').value;
+    const priority = document.getElementById('priorityFilter').value;
+    
+    let url = '/api/tasks';
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (priority) params.append('priority', priority);
+    if (params.toString()) url += '?' + params.toString();
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('tasksContainer');
+            if (data.data.length === 0) {
+                container.innerHTML = '<p class="no-tasks">No tasks found. Create one to get started!</p>';
+                return;
+            }
+            
+            container.innerHTML = data.data.map(task => `
+                <div class="task-card priority-${task.priority} status-${task.status}">
+                    <div class="task-header">
+                        <h3>${task.title}</h3>
+                        <span class="task-status">${task.status.replace('_', ' ').toUpperCase()}</span>
+                    </div>
+                    <p class="task-description">${task.description || 'No description'}</p>
+                    <div class="task-meta">
+                        <span class="task-priority priority-${task.priority}">${task.priority.toUpperCase()}</span>
+                        <span class="task-date">Created: ${new Date(task.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div class="task-actions">
+                        <button class="btn btn-sm btn-primary" onclick="openEditTaskModal('${task.id}')">✏️ Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')">🗑️ Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function filterTasks() {
+    loadTasks();
+}
+
+function openCreateTaskModal() {
+    document.getElementById('createTaskModal').style.display = 'block';
+}
+
+function closeCreateTaskModal() {
+    document.getElementById('createTaskModal').style.display = 'none';
+    document.getElementById('createTaskForm').reset();
+}
+
+function openEditTaskModal(taskId) {
+    fetch(`/api/tasks/${taskId}`)
+        .then(response => response.json())
+        .then(data => {
+            const task = data.data;
+            document.getElementById('editTaskId').value = task.id;
+            document.getElementById('editTaskTitle').value = task.title;
+            document.getElementById('editTaskDescription').value = task.description || '';
+            document.getElementById('editTaskStatus').value = task.status;
+            document.getElementById('editTaskPriority').value = task.priority;
+            document.getElementById('editTaskModal').style.display = 'block';
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function closeEditTaskModal() {
+    document.getElementById('editTaskModal').style.display = 'none';
+}
+
+document.getElementById('createTaskForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const title = document.getElementById('taskTitle').value;
+    const description = document.getElementById('taskDescription').value;
+    const priority = document.getElementById('taskPriority').value;
+    
+    fetch('/api/tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title, description, priority})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Task created successfully!');
+            socket.emit('task_created', data.data);
+            closeCreateTaskModal();
+            loadTasks();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+document.getElementById('editTaskForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const taskId = document.getElementById('editTaskId').value;
+    const title = document.getElementById('editTaskTitle').value;
+    const description = document.getElementById('editTaskDescription').value;
+    const status = document.getElementById('editTaskStatus').value;
+    const priority = document.getElementById('editTaskPriority').value;
+    
+    fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title, description, status, priority})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Task updated successfully!');
+            socket.emit('task_updated', data.data);
+            closeEditTaskModal();
+            loadTasks();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+function deleteTask(taskId) {
+    if (confirm('Are you sure you want to delete this task?')) {
+        fetch(`/api/tasks/${taskId}`, {method: 'DELETE'})
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Task deleted successfully!');
+                    socket.emit('task_deleted', {task_id: taskId});
+                    loadTasks();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+}
+</script>
+{% endblock %}

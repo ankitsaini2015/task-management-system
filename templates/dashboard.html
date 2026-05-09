@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Task Management System{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="welcome-section">
+        <h1>Welcome, {{ username }}! 👋</h1>
+        <p>Here's your task management summary</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-content">
+                <h3>Total Tasks</h3>
+                <p class="stat-number">{{ total_tasks }}</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-content">
+                <h3>Completed</h3>
+                <p class="stat-number">{{ completed_tasks }}</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-content">
+                <h3>Pending</h3>
+                <p class="stat-number">{{ pending_tasks }}</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-content">
+                <h3>Completion Rate</h3>
+                <p class="stat-number">{{ completion_percentage }}%</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="analytics-section">
+        <h2>📈 Real-time Analytics</h2>
+        <div id="analytics-container" class="analytics-container">
+            <p>Loading analytics...</p>
+        </div>
+    </div>
+
+    <div class="quick-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-buttons">
+            <a href="{{ url_for('main.tasks') }}" class="btn btn-primary">View All Tasks</a>
+            <button class="btn btn-success" onclick="document.getElementById('newTaskModal').style.display='block'">➕ Add New Task</button>
+        </div>
+    </div>
+</div>
+
+<!-- New Task Modal -->
+<div id="newTaskModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Create New Task</h2>
+            <span class="close" onclick="document.getElementById('newTaskModal').style.display='none'">&times;</span>
+        </div>
+        <form id="newTaskForm" class="modal-form">
+            <div class="form-group">
+                <label for="newTaskTitle">Title *</label>
+                <input type="text" id="newTaskTitle" required maxlength="200" placeholder="Enter task title">
+            </div>
+            
+            <div class="form-group">
+                <label for="newTaskDescription">Description</label>
+                <textarea id="newTaskDescription" rows="4" placeholder="Enter task description"></textarea>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="newTaskPriority">Priority</label>
+                    <select id="newTaskPriority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Create Task</button>
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('newTaskModal').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const socket = io();
+
+socket.on('analytics_update', function(data) {
+    const container = document.getElementById('analytics-container');
+    container.innerHTML = `
+        <div class="analytics-grid">
+            <div class="analytics-item">
+                <span class="analytics-label">Total Tasks:</span>
+                <span class="analytics-value">${data.total_tasks}</span>
+            </div>
+            <div class="analytics-item">
+                <span class="analytics-label">Completed:</span>
+                <span class="analytics-value">${data.completed_tasks}</span>
+            </div>
+            <div class="analytics-item">
+                <span class="analytics-label">Pending:</span>
+                <span class="analytics-value">${data.pending_tasks}</span>
+            </div>
+            <div class="analytics-item">
+                <span class="analytics-label">Completion Rate:</span>
+                <span class="analytics-value">${data.completion_percentage}%</span>
+            </div>
+        </div>
+    `;
+});
+
+socket.emit('analytics_request');
+
+// Add task form submission
+document.getElementById('newTaskForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const title = document.getElementById('newTaskTitle').value;
+    const description = document.getElementById('newTaskDescription').value;
+    const priority = document.getElementById('newTaskPriority').value;
+    
+    fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            title: title,
+            description: description,
+            priority: priority
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Task created successfully!');
+            socket.emit('task_created', data.data);
+            document.getElementById('newTaskModal').style.display = 'none';
+            document.getElementById('newTaskForm').reset();
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+</script>
+{% endblock %}
